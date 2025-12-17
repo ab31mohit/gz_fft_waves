@@ -1,9 +1,14 @@
 cmake_minimum_required(VERSION 3.10.2)
 
-######## Initialize the project #########
+#============================================================================
+# Initialize the project
+#============================================================================
 project(gz_fft_waves VERSION 1.0.0)
+# project(gz_fft_waves)
 
+#============================================================================
 # Find gz-cmake
+#============================================================================
 if("$ENV{GZ_VERSION}" STREQUAL "garden"
     OR "$ENV{GZ_VERSION}" STREQUAL "harmonic"
     OR NOT DEFINED "ENV{GZ_VERSION}")
@@ -14,26 +19,15 @@ elseif("$ENV{GZ_VERSION}" STREQUAL "ionic")
   set(GZ_CMAKE_VER ${gz-cmake4_VERSION_MAJOR})
 endif()
 
-
-########## Configure the project ###########
+#============================================================================
+# Configure the project
+#============================================================================
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 gz_configure_project()
 
-
-# ########### Include cmake #############
-# include(${PROJECT_SOURCE_DIR}/cmake/URL.conf.cmake)
-# list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-
-
-# #--------------------------------------
-# # Find gnuplot-iostream - the header is used by the examples in test/plots
-# include(Add_gnuplot-iostream)
-
-
-########## find gazbeo dependencies based on it's version #############
-# Garden
+# Garden (default)
 if("$ENV{GZ_VERSION}" STREQUAL "garden" OR NOT DEFINED "ENV{GZ_VERSION}")
 
   #--------------------------------------
@@ -179,7 +173,8 @@ else()
 endif()
 
 
-########## find OGRE #################
+#--------------------------------------
+# Find OGRE
 list(APPEND gz_ogre_components "RTShaderSystem" "Terrain" "Overlay" "Paging")
 
 gz_find_package(GzOGRE VERSION 1.9.0
@@ -203,37 +198,22 @@ endif()
 if (OGRE2_FOUND)
   set(HAVE_OGRE2 TRUE)
 endif()
+# set(HAVE_OGRE2 FALSE)
 
-
-######## Define compile-time default variables ############
+# -------------------------------------
+# Define compile-time default variables
 if(MSVC)
   set(GZ_RENDERING_PLUGIN_PATH ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR})
 else()
   set(GZ_RENDERING_PLUGIN_PATH ${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_LIBDIR})
 endif()
 
-
-######### Find eigen3 ###########
+#--------------------------------------
+# Find eigen3
 find_package(Eigen3 REQUIRED)
 
-
-######## find CGAL and its components ##########
-find_package(CGAL REQUIRED COMPONENTS Core)
-
-if(NOT CGAL_FOUND)
-  message(STATUS "This project requires the CGAL library, and will not be compiled.")
-  return()  
-endif()
-
-message("CGAL_VERSION_MAJOR: ${CGAL_VERSION_MAJOR}")
-
-if (${CGAL_VERSION_MAJOR} LESS 6)
-  # include helper file
-  include(${CGAL_USE_FILE})
-endif()
-
-
-####### Find FFTW3 (double-precision) (GPL) as FFT library ########
+#--------------------------------------
+# Find FFTW3 (double-precision) (GPL) as FFT library.
 find_path(FFTW3-3_INCLUDE_DIR
   NAMES fftw3.h
   HINTS $ENV{FFTW3_DIR}/include
@@ -252,37 +232,65 @@ add_definitions(-DUSE_FFTW3)
 set(FFT_INCLUDE_DIRS ${FFTW3-3_INCLUDE_DIR})
 set(FFT_LIBRARIES ${FFTW3-3_LIBRARY})
 
-# #--------------------------------------
-# # Find OpenCL
+# ------------------------------------------------------------
+# Find MKL (oneAPI)
+set(MKL_ROOT "/opt/intel/oneapi/mkl/2025.3")
 
-# # find_package(OpenCL REQUIRED)
+# Include directory
+set(FFT_INCLUDE_DIRS "${MKL_ROOT}/include")
 
-# #--------------------------------------
-# # Find clFFT
+# Find required MKL libraries
+find_library(MKL_RT_LIBRARY        NAMES mkl_rt        PATHS "${MKL_ROOT}/lib")
+find_library(MKL_CDFT_CORE_LIBRARY NAMES mkl_cdft_core PATHS "${MKL_ROOT}/lib")
 
-# # find_package(clFFT REQUIRED)
+if(NOT MKL_RT_LIBRARY)
+    message(FATAL_ERROR "Could not find mkl_rt")
+endif()
 
-# #============================================================================
+if(NOT MKL_CDFT_CORE_LIBRARY)
+    message(FATAL_ERROR "Could not find mkl_cdft_core (needed for DftiCreateDescriptor_d_md)")
+endif()
 
-# # Location of "fake install folder" used in tests
-# # Defined here at root scope so it is available for tests in src and test folders
-# set(FAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/fake/install")
+# Preserve your original structure
+set(FFT_LIBRARIES
+    ${MKL_RT_LIBRARY}
+    ${MKL_CDFT_CORE_LIBRARY}
+    pthread
+    m
+    dl
+)
 
-# #============================================================================
-# # Configure the build
-# #============================================================================
+add_definitions(-DUSE_MKL)
 
+# Runtime paths
+set(CMAKE_BUILD_RPATH  "${MKL_ROOT}/lib")
+set(CMAKE_INSTALL_RPATH "${MKL_ROOT}/lib")
+
+
+#--------------------------------------
+# CGAL and its components...
+find_package(CGAL REQUIRED COMPONENTS Core)
+
+if(NOT CGAL_FOUND)
+  message(STATUS "This project requires the CGAL library, and will not be compiled.")
+  return()  
+endif()
+
+message("CGAL_VERSION_MAJOR: ${CGAL_VERSION_MAJOR}")
+
+if (${CGAL_VERSION_MAJOR} LESS 6)
+  # include helper file
+  include(${CGAL_USE_FILE})
+endif()
+
+
+#============================================================================
+# Configure the build
+#============================================================================
 gz_configure_build(QUIT_IF_BUILD_ERRORS)
 
-# # add_subdirectory(examples)
 
-# #============================================================================
-# # Create package information
-# #============================================================================
+#============================================================================
+# Create package information
+#============================================================================
 gz_create_packages()
-
-#============================================================================
-# Configure documentation
-#============================================================================
-
-# TODO: add documentation api.md.in files

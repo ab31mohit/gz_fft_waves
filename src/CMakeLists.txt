@@ -1,6 +1,6 @@
-#-----------------------------------------------------------------------------------
-# custom function to simplify linking & building plugins
+# function to simplify plugin building and linking
 function(gz_add_system system_name)
+
   set(options)
   set(oneValueArgs)
   set(multiValueArgs SOURCES PUBLIC_LINK_LIBS PRIVATE_LINK_LIBS PRIVATE_COMPILE_DEFS)
@@ -16,13 +16,9 @@ function(gz_add_system system_name)
   set(system_name ${system_name}-system)
 
   if(MSVC)
-    # Warning #4251 is the "dll-interface" warning that tells you when types
-    # used by a class are not being exported. These generated source files have
-    # private members that don't get exported, so they trigger this warning.
-    # However, the warning is not important since those members do not need to
-    # be interfaced with.
     set_source_files_properties(${sources} COMPILE_FLAGS "/wd4251")
   endif()
+
 
   gz_add_component(${system_name}
     SOURCES ${sources}
@@ -45,12 +41,8 @@ function(gz_add_system system_name)
         ${gz_add_system_PRIVATE_COMPILE_DEFS}
     )
   endif()
-
 endfunction()
-# ----------------------------------------------------------------------------------------------
 
-
-#
 set(sources
   core/Algorithm.cc
   core/Convert.cc
@@ -66,46 +58,52 @@ set(sources
   core/WavefieldSampler.cc
   core/WaveParameters.cc
   core/WaveSimulation.cc
+  core/WaveSpectrum.cc
+  core/WaveSpreadingFunction.cc
   core/LinearRandomFFTWaveSimulation.cc
   core/LinearRandomWaveSimulation.cc
   core/LinearRegularWaveSimulation.cc
   core/TrochoidIrregularWaveSimulation.cc
-  core/WaveSpectrum.cc
-  core/WaveSpreadingFunction.cc
 )
 
-# Create the library target
+
+# Let gz-cmake/gz_create_core_library pick up the global C++ standard;
+# don't pass CXX_STANDARD explicitly.
 gz_create_core_library(SOURCES ${sources} CXX_STANDARD ${CMAKE_CXX_STANDARD})
 
 target_link_libraries(${PROJECT_LIBRARY_TARGET_NAME}
   PUBLIC
-  gz-math${GZ_MATH_VER}
-  gz-msgs${GZ_MSGS_VER}::gz-msgs${GZ_MSGS_VER}
-  gz-common${GZ_COMMON_VER}::gz-common${GZ_COMMON_VER}
-  gz-common${GZ_COMMON_VER}::graphics
-  gz-common${GZ_COMMON_VER}::profiler
-  gz-transport${GZ_TRANSPORT_VER}::gz-transport${GZ_TRANSPORT_VER}
-  sdformat${SDF_VER}::sdformat${SDF_VER}
-  ${FFT_LIBRARIES}
+    gz-math${GZ_MATH_VER}
+    gz-msgs${GZ_MSGS_VER}::gz-msgs${GZ_MSGS_VER}
+    gz-common${GZ_COMMON_VER}::gz-common${GZ_COMMON_VER}
+    gz-common${GZ_COMMON_VER}::graphics
+    gz-common${GZ_COMMON_VER}::profiler
+    gz-transport${GZ_TRANSPORT_VER}::gz-transport${GZ_TRANSPORT_VER}
+    sdformat${SDF_VER}::sdformat${SDF_VER}
+    ${FFT_LIBRARIES}
 )
+
 if (${CGAL_VERSION_MAJOR} GREATER_EQUAL 6)
   target_link_libraries(${PROJECT_LIBRARY_TARGET_NAME}
     PUBLIC
-    CGAL::CGAL
+      CGAL::CGAL
   )
 endif()
+
 if (UNIX AND NOT APPLE)
   target_link_libraries(${PROJECT_LIBRARY_TARGET_NAME}
-    PRIVATE stdc++fs)
+    PRIVATE stdc++fs
+  )
 endif()
 
 target_include_directories(${PROJECT_LIBRARY_TARGET_NAME}
   PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-  ${EIGEN3_INCLUDE_DIR}
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+    ${EIGEN3_INCLUDE_DIR}
+    ${FFT_INCLUDE_DIRS}
 )
 
-# -------------------------------------------------------------------
+#################################################
 # Rendering components
 set(GZ-RENDERING_LIBRARY_DIRS
   ${GZ-RENDERING_INCLUDE_DIRS}/../../../lib/gz-rendering-${GZ_RENDERING_VER}/engine-plugins)
@@ -126,13 +124,11 @@ gz_add_component(rendering
   GET_TARGET_NAME
     rendering_target
 )
-
 set_property(
   SOURCE rendering/RenderEngineExtensionManager.cc
   PROPERTY COMPILE_DEFINITIONS
   GZ_RENDERING_PLUGIN_PATH="${GZ_RENDERING_PLUGIN_PATH}"
 )
-
 target_link_libraries(${rendering_target}
   PUBLIC
     gz-common${GZ_COMMON_VER}::gz-common${GZ_COMMON_VER}
@@ -155,12 +151,10 @@ gz_add_component(rendering-ogre2
   DEPENDS_ON_COMPONENTS
     ${rendering_target}
 )
-
 target_link_directories(${rendering_ogre2_target}
   PUBLIC
     ${GZ-RENDERING_LIBRARY_DIRS}
 )
-
 target_link_libraries(${rendering_ogre2_target}
   PUBLIC
     ${rendering_target}
@@ -177,8 +171,7 @@ target_compile_definitions(${rendering_ogre2_target}
   PUBLIC
     OGRE_IGNORE_UNKNOWN_DEBUG
 )
-# ------------------------------------------------------------------------------------
 
-# --------------------------------------
-# adding plugins/ to cmake build system
+#################################################
+# adding plugins/ directory to cmake build system
 add_subdirectory(plugins)

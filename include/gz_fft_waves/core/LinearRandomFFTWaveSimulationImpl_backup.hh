@@ -1,12 +1,11 @@
-// LinearRandomMKLWaveSimulationImpl.hh - Declaration of LinearRandomFFTWaveSimulation::Impl (using Intel MKL library)
+// LinearRandomMKLWaveSimulationImpl_backup.hh - Declaration of LinearRandomFFTWaveSimulation::Impl (using FFTW3 library)
 
-#ifndef GZ_WAVES_SRC_LINEARRANDOMMKLFFTWAVESIMULATIONIMPL_HH_
-#define GZ_WAVES_SRC_LINEARRANDOMMKLFFTWAVESIMULATIONIMPL_HH_
+#ifndef GZ_WAVES_SRC_LINEARRANDOMFFTWAVESIMULATIONIMPL_HH_
+#define GZ_WAVES_SRC_LINEARRANDOMFFTWAVESIMULATIONIMPL_HH_
 
 #include <Eigen/Dense>
 
-#include <mkl.h>
-#include <mkl_dfti.h>
+#include <fftw3.h>
 
 #include <complex>
 #include <vector>
@@ -14,8 +13,7 @@
 #include "gz_fft_waves/core/WaveSimulation.hh"
 #include "gz_fft_waves/core/LinearRandomFFTWaveSimulation.hh"
 
-namespace Eigen
-{
+namespace Eigen {
   typedef Eigen::Array<
     std::complex<double>,
     Eigen::Dynamic,
@@ -31,22 +29,20 @@ namespace Eigen
   > ArrayXXdRowMajor;
 }  // namespace Eigen
 
-namespace gz
-{
-namespace waves
-{
+namespace gz {
+namespace waves {
 //////////////////////////////////////////////////
-// LinearRandomMKLWaveSimulation::Impl
+// LinearRandomFFTWaveSimulation::Impl
 
-typedef double mkl_data_type;
-typedef std::complex<mkl_data_type> complex;
+typedef double fftw_data_type;
+typedef std::complex<fftw_data_type> complex;
 
-/// \brief Implementation of a FFT based wave simulation model using Intel MKL
+/// \brief Implementation of a FFT based wave simulation model
 ///
 /// \note The FFT wave simulation mixes storage ordering which
 ///       must be made consistent and should be column major
 ///       which is the Eigen default..
-///>
+///
 class LinearRandomFFTWaveSimulation::Impl
 {
  public:
@@ -118,10 +114,14 @@ class LinearRandomFFTWaveSimulation::Impl
   void InitWaveNumbers();
   void InitPressureGrid();
 
-  void CreateMKLPlans();
-  void DestroyMKLPlans();
+  void CreateFFTWPlans();
+  void DestroyFFTWPlans();
 
-  /// \note Eigen::ArrayXXcd is column-major, but MKL assumes row-major format.
+  /// \note FFTW expects the multi-dimensional arrays to be in row-major
+  ///       format. Eigen::ArrayXXcd is column-major, so here we
+  ///       explicity set the storage type.
+  ///
+  /// https://www.fftw.org/fftw3_doc/Row_002dmajor-Format.html
   ///
   Eigen::ArrayXXcdRowMajor fft_h_;       // FFT0 - height
   Eigen::ArrayXXcdRowMajor fft_h_ikx_;   // FFT1 - d height / dx
@@ -132,6 +132,10 @@ class LinearRandomFFTWaveSimulation::Impl
   Eigen::ArrayXXcdRowMajor fft_h_kyky_;  // FFT6 - d displacement y / dy
   Eigen::ArrayXXcdRowMajor fft_h_kxky_;  // FFT7 - d displacement x / dy
 
+  /// \note if using fftw_plan_dft_c2r_2d:
+  ///       complex input array has size: nx * ny / 2 + 1
+  ///       real output array has size:   nx * ny
+  ///
   Eigen::ArrayXXdRowMajor  fft_out0_;
   Eigen::ArrayXXdRowMajor  fft_out1_;
   Eigen::ArrayXXdRowMajor  fft_out2_;
@@ -141,20 +145,13 @@ class LinearRandomFFTWaveSimulation::Impl
   Eigen::ArrayXXdRowMajor  fft_out6_;
   Eigen::ArrayXXdRowMajor  fft_out7_;
 
-  // creating 2d fft descriptor handles for the mkl library
-  DFTI_DESCRIPTOR_HANDLE fft_plan0_ = nullptr;
-  DFTI_DESCRIPTOR_HANDLE fft_plan1_ = nullptr;
-  DFTI_DESCRIPTOR_HANDLE fft_plan2_ = nullptr;
-  DFTI_DESCRIPTOR_HANDLE fft_plan3_ = nullptr;
-  DFTI_DESCRIPTOR_HANDLE fft_plan4_ = nullptr;
-  DFTI_DESCRIPTOR_HANDLE fft_plan5_ = nullptr;
-  DFTI_DESCRIPTOR_HANDLE fft_plan6_ = nullptr;
-  DFTI_DESCRIPTOR_HANDLE fft_plan7_ = nullptr;
+  fftw_plan fft_plan0_, fft_plan1_, fft_plan2_, fft_plan3_;
+  fftw_plan fft_plan4_, fft_plan5_, fft_plan6_, fft_plan7_;
 
   /// FFT storage and plans for pressure calculations
   std::vector<Eigen::ArrayXXcdRowMajor>   fft_in_p_;
   std::vector<Eigen::ArrayXXdRowMajor>    fft_out_p_;
-  std::vector<DFTI_DESCRIPTOR_HANDLE>     fft_plan_p_;
+  std::vector<fftw_plan>                  fft_plan_p_;
 
   /// \brief lazy evaluation flags
   std::vector<bool> fft_needs_update_;
@@ -227,4 +224,4 @@ class LinearRandomFFTWaveSimulation::Impl
 }  // namespace waves
 }  // namespace gz
 
-#endif  // GZ_WAVES_SRC_LINEARRANDOMMKLFFTWAVESIMULATIONIMPL_HH_
+#endif  // GZ_WAVES_SRC_LINEARRANDOMFFTWAVESIMULATIONIMPL_HH_
